@@ -1,0 +1,31 @@
+{
+  "incident_id": "INC-2024-001",
+  "title": "PostgreSQL connection pool exhaustion on checkout-service causing 504 gateway timeouts",
+  "service": "checkout-service",
+  "environment": "production",
+  "severity": "SEV-1",
+  "date": "2024-01-15",
+  "symptoms": [
+    "95% of checkout requests timing out at 30s",
+    "'dial tcp: i/o timeout' errors in gateway logs",
+    "PostgreSQL connection pool exhausted (max_connections=200)",
+    "Worker queue depth climbing (Celery workers busy but not progressing)"
+  ],
+  "root_cause": "Orphaned Celery workers were holding Redis distributed locks indefinitely after a prior aborted deploy. Long-running tasks never released their lock keys, retries stacked on the same lock records, and every wake-up re-opened a fresh PostgreSQL connection instead of reusing pool sessions. Within minutes the checkout-service pool was saturated and the gateway returned 504s.",
+  "resolution_runbook": [
+    "1. Rollback the stuck checkout-service deploy: kubectl rollout undo deployment/checkout-service -n production",
+    "2. Flush the orphaned Celery Redis lock keys: redis-cli -h <redis-host> --scan --pattern 'locks:celery:*' | xargs redis-cli -h <redis-host> del",
+    "3. Raise headroom on the DB pool: psql -c \"ALTER SYSTEM SET max_connections = 500; SELECT pg_reload_conf();\"",
+    "4. Kill stale DB sessions: psql -c \"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND state_change < now() - interval '5 minutes' AND pid <> pg_backend_pid();\"",
+    "5. Re-deploy fixed build with lock timeouts: kubectl set image deployment/checkout-service checkout-service=checkout-service:v1.9.2 -n production"
+  ],
+  "validation": "504 rate back under 0.1%, pool utilisation stable at 180/500, Celery queue depth flat.",
+  "tags": [
+    "checkout-service",
+    "postgresql",
+    "connection-pool",
+    "celery",
+    "redis-locks",
+    "504-timeout"
+  ]
+}

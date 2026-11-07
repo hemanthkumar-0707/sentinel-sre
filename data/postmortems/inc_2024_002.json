@@ -1,0 +1,31 @@
+{
+  "incident_id": "INC-2024-002",
+  "title": "Redis OOM maxmemory spike killing /auth/v1/token issuance",
+  "service": "auth-service",
+  "environment": "production",
+  "severity": "SEV-2",
+  "date": "2024-02-22",
+  "symptoms": [
+    "Login latency p99 exceeded 8s",
+    "Redis stats: used_memory pinned at maxmemory, evictions climbing",
+    "auth-service pod logs: 'OOM command not allowed when used memory > maxmemory'",
+    "Intermittent token-issuance failures on /auth/v1/token"
+  ],
+  "root_cause": "JWT revocation (blacklist) keys were written on every logout/refresh without a TTL, so the set of expired bl_token:* entries grew unbounded. Once Redis hit maxmemory it began refusing writes and evicting live session data, which throttled token issuance.",
+  "resolution_runbook": [
+    "1. Measure blacklist size: redis-cli -h <redis-host> dbsize && redis-cli -h <redis-host> info memory",
+    "2. Purge expired blacklist keys: redis-cli -h <redis-host> --scan --pattern 'bl_token:*' | xargs redis-cli -h <redis-host> del",
+    "3. Confirm write headroom restored: redis-cli -h <redis-host> info memory | grep used_memory_human",
+    "4. Deploy the fix so new blacklist keys carry a 7-day TTL: kubectl set image deployment/auth-service auth-service=auth-service:v1.8.4 -n production",
+    "5. Watch eviction metrics for 30 minutes to confirm no regressions"
+  ],
+  "validation": "used_memory fell to 62% of maxmemory, /auth/v1/token p99 back under 300ms, zero OOM errors in 24h.",
+  "tags": [
+    "auth-service",
+    "redis",
+    "oom",
+    "jwt",
+    "blacklist",
+    "ttl"
+  ]
+}

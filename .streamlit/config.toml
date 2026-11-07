@@ -1,0 +1,10 @@
+# Sentinel SRE Streamlit theme - modern dark mode
+[theme]
+base = "dark"
+primaryColor = "#76B900"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#16181D"
+textColor = "#E8E8E8"
+
+[server]
+headless = true

@@ -1,0 +1,19 @@
+# Secrets & environment
+.env
+
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# OS / editor noise
+.DS_Store
+
+# Streamlit local secrets (never commit)
+.streamlit/secrets.toml
+
+# Runtime logs (may contain local/network host info)
+*.log
+
+# Article drafts (publish externally, never in the repository)
+article.md
